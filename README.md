@@ -451,13 +451,13 @@ Connect-MgGraph -Scopes `
     -Verbose
 
 # Output:
-# Assessment complete
-# Overall Score: 74%
-# Critical findings: 0
-# High findings: 4
-# Medium findings: 12
-# Low findings: 8
-# Report saved: .\reports\assessment-20260601.html
+### Assessment complete
+### Overall Score: 74%
+### Critical findings: 0
+### High findings: 4
+### Medium findings: 12
+### Low findings: 8
+### Report saved: .\reports\assessment-20260601.html
 
 
 A full assessment across all six
