@@ -7,7 +7,7 @@
 
 ## Overview
 
-This project documents the design and
+This work documents the design and
 operation of a production Microsoft
 Sentinel Security Operations Centre
 connected to a live Windows Server 2022
