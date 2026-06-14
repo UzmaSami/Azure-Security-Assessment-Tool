@@ -5,782 +5,653 @@
 ## Architecture
 ![Architecture](docs/architecture-diagram.png)
 
+
 ## Overview
 
-This work documents the design and
-operation of a production Microsoft
-Sentinel Security Operations Centre
-connected to a live Windows Server 2022
-Domain Controller via Azure Arc — detecting,
-investigating, and responding to real
-security threats including brute force
-attacks, privilege escalation attempts,
-and suspicious PowerShell execution.
+This project documents the design and
+development of a custom PowerShell-based
+security assessment engine that scans
+50+ security controls across six domains
+in a hybrid Azure environment and
+generates executive-level HTML compliance
+reports with interactive filtering,
+remediation guidance, and trend tracking.
 
-This is not a simulated environment.
-The threats documented here were detected
-on a production Domain Controller running
-Active Directory. The alerts are real.
-The incidents are real. The automated
-responses are real.
+Security assessment tools exist in two
+forms. Commercial tools — Tenable, Qualys,
+Rapid7 — provide comprehensive scanning
+capability at significant cost and with
+significant operational overhead. Built-in
+platform tools — Defender for Cloud,
+Azure Policy compliance — provide coverage
+within their specific scope but require
+navigation across multiple portals to
+assemble a complete picture.
 
-Most security portfolios demonstrate
-Sentinel configuration. This project
-demonstrates Sentinel operation — the
-difference between setting up a tool
-and using it to detect and respond to
-actual adversarial behaviour.
+Neither approach answers the question that
+matters most to security leadership: in
+plain language, right now, how secure are
+we and what are the three things we should
+fix first?
+
+This tool answers that question in a single
+automated run, producing a report that
+a security engineer can act on and a
+business leader can understand.
 
 ---
 
 ## The Problem This Solves
 
-A Security Operations Centre exists to
-answer one question continuously: is
-something happening in our environment
-right now that requires a response?
+Security teams in hybrid environments
+typically maintain security posture
+information across multiple systems.
+Defender for Cloud holds cloud security
+recommendations. Active Directory
+administrative tools hold on-premises
+configuration data. Azure Policy
+compliance holds governance status.
+Log Analytics holds security event
+trends. No single view combines them.
 
-Answering that question requires three
-capabilities working together. First,
-visibility — the SOC must receive
-telemetry from every asset in the
-environment. Second, detection — the
-SOC must have the analytical capability
-to identify meaningful signals within
-that telemetry and distinguish genuine
-threats from background noise. Third,
-response — when a threat is detected
-the SOC must be able to act on it
-quickly enough to prevent or limit
-damage.
+Assembling a complete security posture
+report manually requires pulling data
+from each system, normalising it into
+a consistent format, applying a
+severity framework, prioritising
+findings, and producing a document
+that communicates clearly to both
+technical and non-technical audiences.
+This process takes hours when done
+manually. It is frequently skipped
+because of that cost. Security posture
+reviews that should happen weekly happen
+quarterly. Quarterly reviews that should
+drive remediation are forgotten by the
+time the next review occurs.
 
-Most organisations that adopt Microsoft
-Sentinel achieve the first capability
-— they connect data sources and data
-starts flowing. Many achieve partial
-detection capability — they enable
-built-in analytics rules and wait for
-alerts. Very few achieve the third
-capability — automated response that
-operates faster than any human analyst
-can.
-
-This project implements all three for
-a hybrid environment where the most
-valuable and most targeted asset —
-the Active Directory Domain Controller
-— is on-premises, not in the cloud.
+Automation solves this. A tool that
+produces a complete, accurate, and
+consistently formatted security posture
+report in minutes removes the cost
+barrier to frequent assessment. Weekly
+posture reviews become practical.
+Remediation progress becomes visible
+between reviews rather than only at
+the next formal assessment.
 
 ---
 
 ## Architecture
 
 
-ON-PREMISES
-═══════════════════════════════════════════
-Windows Server 2022 DC (UzmaSamiDC01)
+ASSESSMENT ENGINE
+════════════════════════════════════════
+
+PowerShell Assessment Engine
 - │
-- ├── Windows Security Event Log
-- │   ├── Event 4624 — Successful logon
-- │   ├── Event 4625 — Failed logon
-- │   ├── Event 4648 — Explicit credential use
-- │   ├── Event 4672 — Special privilege logon
-- │   ├── Event 4688 — Process creation
-- │   ├── Event 4698 — Scheduled task created
-- │   ├── Event 4720 — User account created
-- │   ├── Event 4728 — Member added to group
-- │   ├── Event 4732 — Member added to group
-- │   └── Event 4104 — PowerShell script block
+- ├── MODULE 1: Identity & Access
+- │   ├── Global Admin count
+- │   ├── MFA registration status
+- │   ├── Guest user review
+- │   ├── Service principal secrets expiry
+- │   ├── PIM configuration status
+- │   ├── Conditional Access coverage
+- │   └── Stale account detection
 - │
-- └── Azure Arc Agent (AMA)
-   - └── Data Collection Rule
-       - └── Streams events to ──────────────►
-                                            - │
-AZURE                                       - │
-═══════════════════════════════════════════ - │
-- Log Analytics Workspace ◄────────────────────┘
+- ├── MODULE 2: Network Security
+- │   ├── VNet configuration
+- │   ├── NSG deny-all baseline
+- │   ├── Public IP exposure
+- │   ├── Azure Firewall status
+- │   ├── Private endpoint coverage
+- │   ├── Network Watcher status
+- │   └── Flow log configuration
 - │
-- ├── Raw event storage (90-day retention)
-- ├── KQL query engine
-- └── Microsoft Sentinel
-  -  │
-  - ├── DATA CONNECTORS
-  - │   ├── Windows Security Events via AMA
-  - │   ├── Microsoft Defender for Cloud
-  - │   ├── Azure Activity
-  - │   └── Azure AD Identity Protection
-  - │
-  - ├── ANALYTICS RULES (Custom)
-  - │   ├── Brute Force — 5+ failures in 5min
-  - │   ├── Privilege Escalation — Group 4728
-  - │   ├── Suspicious PowerShell — Event 4104
-  - │   ├── After Hours Admin Logon
-  - │   └── New Local Admin Account Created
-  - │
-  - ├── INCIDENTS
-  - │   ├── Real brute force detected ✅
-  - │   ├── Real priv escalation detected ✅
-  - │   └── Real PowerShell detected ✅
-  - │
-  - ├── AUTOMATION RULES
-  - │   ├── Auto-assign to analyst
-  - │   ├── Auto-tag by severity
-  - │   └── Trigger playbooks
-  - │
-  -└── PLAYBOOKS (Logic Apps)
-    - ├── Notify-On-Critical-Incident
-      - └── Enrich-Incident-With-IP-Info
+- ├── MODULE 3: Data Protection
+- │   ├── Storage account public access
+- │   ├── Storage secure transfer
+- │   ├── Key Vault public access
+- │   ├── Key Vault soft delete
+- │   ├── Key Vault purge protection
+- │   ├── SQL TDE status
+- │   └── Encryption key management
+- │
+- ├── MODULE 4: Security Operations
+- │   ├── Defender for Cloud plans
+- │   ├── Secure Score
+- │   ├── Sentinel status
+- │   ├── Log Analytics retention
+- │   ├── Arc agent connectivity
+- │   ├── Security contacts
+- │   └── Auto provisioning
+- │
+- ├── MODULE 5: Governance
+- │   ├── Management Group structure
+- │   ├── Policy assignment coverage
+- │   ├── RBAC custom roles
+- │   ├── Resource locks
+- │   ├── Tag compliance
+- │   ├── Subscription access review
+- │   └── Blueprint assignments
+- │
+- ├── MODULE 6: Hybrid Infrastructure
+- │   ├── Arc server health
+- │   ├── Arc extension status
+- │   ├── AAD Connect sync health
+- │   ├── DC security baseline
+- │   ├── Audit policy configuration
+- │   └── Domain admin count
+- │
+- └── REPORT GENERATOR
+    - ├── Executive summary
+    - ├── Score by category
+    - ├── Critical findings table
+    - ├── Remediation priority list
+    - ├── Trend comparison (if history)
+    - └── Interactive HTML output
 
 
 ---
 
-## Why On-Premises DC as the Primary
-## Data Source
+## Why Build a Custom Tool
 
-The Domain Controller is the most
-attacked asset in any Active Directory
-environment. It holds the credentials
-for every user in the organisation. It
-controls authentication for every
-resource on the domain. It stores
-the Group Policy that governs the
-security configuration of every domain-
-joined machine. Compromise of the
-Domain Controller is effectively
-compromise of the entire organisation.
+The question worth addressing directly
+is why build a custom assessment tool
+when Defender for Cloud already provides
+security recommendations and a Secure
+Score.
 
-It is also the asset most frequently
-excluded from cloud SIEM deployments.
-Cloud-native SIEMs connect easily to
-cloud services — Entra ID sign-in logs,
-Azure Activity logs, Defender for Cloud
-alerts all have native Sentinel
-connectors that require minimal
-configuration. On-premises Domain
-Controllers require Arc connectivity,
-Data Collection Rules, and careful
-event filtering to collect the right
-events without generating overwhelming
-log volume.
+Defender for Cloud is excellent at what
+it does. It assesses Azure resources
+against a comprehensive control framework
+and surfaces recommendations clearly.
+It does not assess on-premises
+infrastructure beyond what Arc exposes.
+It does not assess Active Directory
+configuration. It does not assess Azure
+AD Connect health. It does not combine
+its findings with custom organisational
+controls that are important for a specific
+environment but not part of the Azure
+Security Benchmark.
 
-This gap between what is easy to
-connect and what is most important to
-monitor is where real-world breaches
-hide. An adversary who understands
-Azure-focused SOC deployments will
-target the on-premises environment
-precisely because they know it is
-less likely to be monitored with the
-same rigour as cloud workloads.
+The custom tool fills those gaps. It
+assesses the complete hybrid environment
+including the components that no built-in
+tool covers. It applies a consistent
+scoring framework across all components
+— cloud and on-premises — producing a
+single score that reflects the true
+security posture of the environment as
+a whole.
 
-Connecting the Domain Controller as
-the primary Sentinel data source closes
-this gap deliberately.
-
----
-
-## Data Collection — Choosing the
-## Right Events
-
-Windows Security Event Log generates
-thousands of events per day on an
-active Domain Controller. Collecting
-all of them creates log volume that
-is expensive to store and impossible
-to query efficiently. The discipline
-of selecting the right events to
-collect is as important as the
-collection itself.
-
-I implemented a Data Collection Rule
-targeting the specific event IDs that
-provide meaningful security signal
-without collecting noise.
-
-Authentication events — 4624, 4625,
-4648, and 4768 — provide visibility
-into who is authenticating, from where,
-with what credentials, and whether they
-are succeeding or failing. Failed
-authentication events are the primary
-signal for credential attack detection.
-
-Privilege events — 4672, 4728, 4732,
-4756, and 4769 — provide visibility
-into sensitive group membership changes
-and special privilege assignments.
-An account being added to Domain Admins
-is a high-value signal that should
-generate an immediate alert regardless
-of context. It may be legitimate. It
-may be an attacker who has achieved
-initial access and is escalating
-privileges. Either way it requires
-immediate investigation.
-
-Process events — 4688 with command
-line logging enabled — provide
-visibility into what processes are
-executing on the Domain Controller.
-Legitimate administration generates
-a predictable pattern of process
-executions. Attackers use tools —
-mimikatz, bloodhound, cobalt strike
-— that generate process executions
-that deviate from that pattern.
-
-PowerShell script block logging —
-event 4104 — captures the actual
-content of PowerShell scripts as
-they execute, after any obfuscation
-has been decoded by the PowerShell
-engine. An adversary who base64
-encodes a malicious PowerShell command
-to evade signature detection will
-find that script block logging captures
-the decoded command regardless of
-the encoding technique used.
+There is also a professional development
+dimension. Building a security assessment
+tool requires understanding every control
+it assesses. Writing the check for
+whether MFA is enforced for all users
+requires understanding the Conditional
+Access policy model well enough to query
+it programmatically. Writing the check
+for whether Key Vault purge protection
+is enabled requires understanding the
+Key Vault security model. The process
+of building the tool deepens the
+understanding of every security domain
+it covers.
 
 ---
 
-## Analytics Rules — Detection Logic
+## Control Framework Design
 
-The built-in Sentinel analytics rules
-provide broad coverage across common
-attack patterns. They are a starting
-point not an endpoint. The rules that
-produce the most value for a specific
-environment are those written for
-that environment — rules that reflect
-its specific users, systems, and
-normal behaviour patterns.
+The 50+ controls assessed by this tool
+were selected against three criteria.
 
-I implemented five custom analytics
-rules targeting the attack patterns
-most relevant to an Active Directory
-environment.
+The first criterion was relevance. Every
+control assessed must be directly
+applicable to this environment. Controls
+that reference services not deployed
+generate noise rather than insight.
+The tool assesses what exists, not what
+could exist.
 
-### Brute Force Detection
+The second criterion was actionability.
+Every failing control must have a clear
+remediation path. A control that flags
+a problem without providing a resolution
+direction creates frustration rather
+than improvement. Each control in the
+tool includes a remediation description
+that explains specifically what must
+be done to move from failing to passing.
 
-kql
-SecurityEvent
-| where EventID == 4625
-| where TimeGenerated > ago(5m)
-| summarize
-    FailureCount = count(),
-    TargetAccounts = make_set(TargetUserName),
-    SourceIPs = make_set(IpAddress)
-    by Computer, bin(TimeGenerated, 5m)
-| where FailureCount >= 5
-| extend
-    AlertSeverity = iff(FailureCount >= 20,
-        "High", "Medium"),
-    Description = strcat(
-        FailureCount,
-        " failed logon attempts detected in 5 minutes"
-    )
+The third criterion was severity
+calibration. Not all security controls
+are equally important. A finding that
+exposes the organisation to immediate
+compromise must be weighted differently
+from a finding that represents a
+configuration best practice. The tool
+assigns severity — Critical, High,
+Medium, Low — based on the potential
+impact of the control failing and the
+likelihood that the failure would be
+exploited.
+
+The severity distribution across the
+control set was designed to reflect
+real-world security prioritisation.
+A tool that classifies every finding
+as Critical produces a report that
+cannot be prioritised. A tool with
+calibrated severity produces a clear
+signal about what requires immediate
+action versus what can be addressed
+in the next planned maintenance window.
+
+---
+
+## The Scoring Model
+
+Each control contributes to an overall
+security score weighted by severity.
 
 
-This rule detects credential stuffing
-and password spray attacks by
-identifying computers generating
-five or more failed authentication
-events within a five-minute window.
-The threshold was calibrated against
-the normal failure rate of the
-environment — a threshold too low
-generates false positives from
-legitimate locked-out users. Too
-high misses slow-and-low spray attacks.
+SCORING WEIGHTS:
+Critical controls: 10 points each
+High controls:      5 points each
+Medium controls:    3 points each
+Low controls:       1 point each
 
-### Privilege Escalation Detection
+SCORE CALCULATION:
+Score = (Points earned / Total possible points) × 100
 
-kql
-SecurityEvent
-| where EventID == 4728
-| where TimeGenerated > ago(1h)
-| where TargetUserName in (
-    "Domain Admins",
-    "Enterprise Admins",
-    "Schema Admins",
-    "Administrators",
-    "Group Policy Creator Owners"
+CATEGORY SCORES:
+Each module calculates its own score
+using the same weighted formula
+
+OVERALL SCORE:
+Weighted average of all six module scores
+with module weights reflecting relative
+security importance
+
+
+This weighted approach means that
+passing all Low controls while failing
+Critical controls does not produce
+a misleadingly high score. The Critical
+control failures suppress the score
+appropriately, reflecting the actual
+risk posture of the environment.
+
+The score is not the point. The point
+is what drives the score. A score of
+72% is meaningful only because the
+report shows exactly which 28% of
+controls are failing, why they are
+failing, and what must be done to
+pass them.
+
+---
+
+## Report Design
+
+The report was designed with two
+audiences in mind simultaneously.
+
+The security engineer audience needs
+technical detail — exactly which
+controls are failing, the specific
+configuration that needs to change,
+and the PowerShell or portal steps
+to remediate. They need to be able
+to act on the report immediately
+without additional research.
+
+The security leadership audience needs
+strategic clarity — overall posture,
+trend direction, top priorities, and
+business risk context. They need to
+understand the security story without
+reading technical configuration details.
+
+A single report serves both audiences
+by separating the summary view from
+the detail view. The executive summary
+leads with the overall score, the trend
+since the last assessment, and the top
+three findings requiring immediate
+attention. The detail section provides
+the technical information for each
+finding. Leadership reads the summary.
+Engineers read the detail. Both find
+what they need in one document.
+
+The report is generated as a self-
+contained HTML file with no external
+dependencies. It can be emailed, stored
+in SharePoint, attached to a ticket,
+or opened offline. No server is required
+to render it. No network connection is
+needed to view it. The report works
+anywhere.
+
+Interactive filtering was implemented
+using JavaScript embedded in the report.
+An engineer reviewing findings can
+filter to show only Critical findings,
+or only findings in the Network Security
+category, or only findings that have
+changed since the last assessment.
+This filtering capability transforms
+the report from a static document into
+a working tool for remediation planning.
+
+---
+
+## Assessment Engine Implementation
+
+The engine is implemented as a
+PowerShell module with a clear
+separation between data collection,
+analysis, and presentation.
+
+Data collection functions query Azure
+APIs and on-premises systems using the
+Az PowerShell module and direct AD
+queries. Each function returns a
+structured object representing the
+result of a single control check —
+the control name, the result, the
+evidence, and the remediation
+description.
+
+Analysis functions aggregate control
+results into module scores, identify
+trend changes by comparing against
+the previous assessment file if one
+exists, and generate the priority
+list by sorting failing controls by
+severity and estimated remediation
+effort.
+
+The presentation layer takes the
+analysis output and renders the HTML
+report. The HTML template is embedded
+in the PowerShell module — the tool
+has no external template file
+dependency. A single script file is
+the complete tool.
+
+powershell
+# Simplified assessment execution flow
+
+# Collect results across all modules
+$identityResults  = Invoke-IdentityAssessment
+$networkResults   = Invoke-NetworkAssessment
+$dataResults      = Invoke-DataAssessment
+$secOpsResults    = Invoke-SecOpsAssessment
+$governanceResults= Invoke-GovernanceAssessment
+$hybridResults    = Invoke-HybridAssessment
+
+# Aggregate and score
+$allResults = @(
+    $identityResults
+    $networkResults
+    $dataResults
+    $secOpsResults
+    $governanceResults
+    $hybridResults
 )
-| project
-    TimeGenerated,
-    SubjectUserName,
-    MemberName,
-    TargetUserName,
-    Computer
-| extend
-    AlertSeverity = "High",
-    Description = strcat(
-        MemberName,
-        " was added to ",
-        TargetUserName,
-        " by ",
-        SubjectUserName
-    )
 
+$assessment = Get-AssessmentScore -Results $allResults
 
-Any addition to a privileged group
-generates a High severity alert
-immediately. There is no threshold
-here — a single event is sufficient
-because legitimate privileged group
-membership changes should be
-infrequent, planned, and approved.
-An alert for every change enforces
-the expectation that every change
-will be reviewed.
+# Compare with previous run
+$previousAssessment = Get-PreviousAssessment
+$trends = Get-AssessmentTrends `
+    -Current $assessment `
+    -Previous $previousAssessment
 
-### Suspicious PowerShell Detection
-
-kql
-Event
-| where EventID == 4104
-| where Source == "Microsoft-Windows-PowerShell"
-| where RenderedDescription has_any (
-    "Invoke-Expression",
-    "IEX",
-    "DownloadString",
-    "WebClient",
-    "EncodedCommand",
-    "FromBase64String",
-    "Bypass",
-    "Hidden",
-    "-nop",
-    "Net.WebClient"
-)
-| project
-    TimeGenerated,
-    Computer,
-    RenderedDescription
-| extend
-    AlertSeverity = "Medium",
-    Description = "Suspicious PowerShell
-    execution technique detected"
-
-
-This rule detects PowerShell
-techniques commonly used in attacks —
-encoded commands designed to evade
-logging, web downloads that retrieve
-payloads from external servers,
-and execution policy bypass attempts.
-Legitimate administrative scripts
-rarely use these techniques. When
-they do appear in a security-conscious
-environment they warrant investigation
-regardless of whether they prove
-to be malicious.
-
----
-
-## Real Threats Detected
-
-This is where this project differs
-from every tutorial and every lab
-exercise. The analytics rules above
-were not written to detect simulated
-data. They detected real events on
-a production Domain Controller.
-
-### Incident 1 — Brute Force Attack
-
-The brute force analytics rule
-triggered against a pattern of
-failed authentication events
-targeting multiple user accounts
-from a single source in a short
-time window. The event data showed
-a classic password spray pattern —
-one or two attempts per account
-across many accounts, staying below
-per-account lockout thresholds while
-testing a common password across
-the user population.
-
-Investigation confirmed the attempts
-were not from any authorised source.
-The ADSAE automation engine — built
-in Project 9 — detected the same
-pattern independently through its
-own monitoring of Event 4625 and
-disabled the targeted accounts
-automatically before any successful
-authentication occurred.
-
-This incident validated the layered
-detection approach — Sentinel
-provided visibility and an incident
-record for investigation while ADSAE
-provided the automated response.
-Neither system alone provides what
-both together achieve.
-
-### Incident 2 — Privilege Escalation
-
-The privilege escalation analytics
-rule triggered on an Event 4728
-showing an account being added to
-the Domain Admins group. The
-SubjectUserName — the account that
-performed the addition — was not
-an account with a legitimate
-administrative function.
-
-Investigation revealed the account
-had been used in the brute force
-attempt from Incident 1 and had
-successfully authenticated during
-a window before the brute force
-rule triggered. The attacker had
-obtained access and immediately
-attempted privilege escalation.
-
-The ADSAE engine removed the account
-from Domain Admins automatically
-on detecting Event 4728. The Sentinel
-incident provided the timeline and
-the full context of how the initial
-access was obtained — information
-that would not have been available
-if only the escalation had been
-detected without the preceding
-authentication events.
-
-### Incident 3 — Suspicious PowerShell
-
-The PowerShell analytics rule
-triggered on Event 4104 showing
-execution of a script containing
-an encoded command and a web
-download attempt. The script
-attempted to download content
-from an external URL using
-System.Net.WebClient.
-
-The ADSAE engine captured the
-full script content as evidence.
-The external URL was submitted
-to threat intelligence and
-confirmed as associated with
-a known malware distribution
-infrastructure.
-
-This incident demonstrated the
-value of PowerShell script block
-logging specifically — the command
-was base64 encoded and would not
-have been detected by signature-
-based tools inspecting the raw
-command line. Script block logging
-captures the decoded execution
-content regardless of encoding.
-
----
-
-## Incident Response Workflow
-
-Each detected incident followed
-a documented response workflow
-that provides consistency and
-ensures no investigation steps
-are skipped regardless of the
-time of day the incident is
-detected.
-
-
-DETECTION
-- │
-- ├── Analytics rule fires
-- ├── Incident created in Sentinel
-- ├── Automation rule assigns incident
-- └── Notification sent via playbook
-        - │
-        - ▼
-TRIAGE (within 15 minutes)
-- │
-- ├── Severity assessment
-- ├── Affected assets identified
-- ├── Initial scope determination
-- └── Escalation decision
-         - │
-         - ▼
-INVESTIGATION
-- │
-- ├── Timeline reconstruction via KQL
-- ├── Related events correlated
-- ├── Threat intelligence lookup
-- └── Root cause identified
-         - │
-         - ▼
-CONTAINMENT
-- │
-- ├── ADSAE automated response (immediate)
-- ├── Account disable if compromised
-- ├── Network isolation if required
-- └── Evidence preservation
-        - │
-        - ▼
-ERADICATION AND RECOVERY
-- │
-- ├── Malicious changes reversed
-- ├── Affected accounts remediated
-- ├── Access reviewed and tightened
-- └── Vulnerability addressed
-         - │
-         - ▼
-POST-INCIDENT
-- │
-- ├── Incident documented in Sentinel
-- ├── Analytics rule tuned if needed
-- ├── ADSAE playbook updated if needed
-- └── Lessons incorporated
+# Generate report
+New-SecurityAssessmentReport `
+    -Assessment $assessment `
+    -Trends $trends `
+    -OutputPath ".\reports\assessment-$(
+        Get-Date -Format 'yyyyMMdd'
+    ).html"
 
 
 ---
 
-## KQL Threat Hunting
+## Running the Assessment
 
-Beyond reactive detection through
-analytics rules I implemented proactive
-threat hunting queries that run against
-historical data to identify patterns
-that may indicate compromise that has
-not yet triggered an alert.
+The tool is designed to run with
+minimal prerequisites. An Az PowerShell
+session authenticated to the target
+subscription and RSAT tools for
+Active Directory query capability
+are the only requirements.
 
-### Hunt for Lateral Movement
+powershell
+# Connect to Azure
+Connect-AzAccount
 
-kql
-SecurityEvent
-| where EventID == 4624
-| where LogonType == 3
-| where TimeGenerated > ago(7d)
-| summarize
-    UniqueSourceIPs = dcount(IpAddress),
-    LogonCount = count(),
-    TargetAccounts = make_set(TargetUserName)
-    by SubjectUserName
-| where UniqueSourceIPs > 3
-| where LogonCount > 20
-| order by UniqueSourceIPs desc
+# Connect to Microsoft Graph
+Connect-MgGraph -Scopes `
+    "Directory.Read.All",
+    "Policy.Read.All",
+    "IdentityRiskyUser.Read.All"
 
+# Run full assessment
+.\Invoke-SecurityAssessment.ps1 `
+    -OutputPath ".\reports\" `
+    -IncludeHybrid `
+    -ComparePrevious `
+    -Verbose
 
-This query identifies accounts
-authenticating from an unusual number
-of source IPs in a seven-day window
-— a pattern consistent with credential
-use across multiple systems that may
-indicate lateral movement.
-
-### Hunt for Persistence Mechanisms
-
-kql
-SecurityEvent
-| where EventID == 4698
-| where TimeGenerated > ago(24h)
-| project
-    TimeGenerated,
-    SubjectUserName,
-    TaskName,
-    TaskContent,
-    Computer
-| where SubjectUserName !endswith "$"
-| order by TimeGenerated desc
+# Output:
+# Assessment complete
+# Overall Score: 74%
+# Critical findings: 0
+# High findings: 4
+# Medium findings: 12
+# Low findings: 8
+# Report saved: .\reports\assessment-20260601.html
 
 
-Scheduled task creation is a common
-persistence mechanism. This query
-identifies scheduled tasks created
-by non-machine accounts in the last
-24 hours — a pattern that warrants
-review to confirm legitimacy.
+A full assessment across all six
+modules completes in approximately
+four minutes on a standard Azure
+subscription with the environment
+size documented in this portfolio.
+The time is dominated by Azure API
+response times rather than local
+processing.
 
 ---
 
-## Playbook — Automated Enrichment
+## Integration with the Portfolio
 
-The incident enrichment playbook
-runs automatically when a High
-severity incident is created. It
-extracts IP addresses from the
-incident and queries a threat
-intelligence API for context —
-country of origin, known malicious
-activity, ASN information — and
-adds this information to the
-incident as a comment.
+The assessment tool was designed
+from the outset to assess the
+specific environment built across
+this 14-project portfolio. Each
+project adds controls to the
+assessment scope.
 
-This enrichment happens in seconds,
-providing the analyst who opens
-the incident with context that
-would otherwise require manual
-lookup against multiple sources.
-The analyst begins investigation
-with information rather than
-beginning investigation by gathering
-information.
+After Project 1 the SOC Operations
+module gains meaningful results as
+Defender for Cloud and Sentinel are
+operational. After Project 2 the
+Identity module gains full coverage
+as Conditional Access and PIM are
+configured. After Project 3 the
+Network module gains full coverage
+as Hub-Spoke and NSGs are deployed.
+After Project 4 the Data module
+gains full coverage as private
+endpoints are in place.
+
+Running the assessment after each
+project documents the improvement
+in security posture that the project
+delivers. The trend comparison feature
+shows the score improvement between
+runs. Over the course of all 14
+projects the assessment output
+tells the story of a security programme
+that progresses systematically from
+a baseline of 21.79% to a mature
+posture exceeding 85%.
+
+This progression — documented through
+assessment reports — is more compelling
+evidence of security engineering
+capability than any individual project
+or certification. It demonstrates
+not just that security controls can
+be implemented but that security
+posture can be measured, tracked,
+and improved systematically.
 
 ---
 
 ## Challenges Encountered
 
-**Data Collection Rule configuration
-for Arc-connected servers**
+*API rate limiting*
 
-The legacy method of connecting on-
-premises servers to Sentinel used
-the Microsoft Monitoring Agent with
-workspace-level configuration. The
-current method uses the Azure
-Monitoring Agent with Data Collection
-Rules. The two methods collect events
-differently and cannot run
-simultaneously on the same server.
+Running 50+ control checks in rapid
+succession against Azure APIs
+occasionally triggered rate limiting
+responses — HTTP 429 errors with
+Retry-After headers. The engine
+was updated to handle these responses
+by implementing exponential backoff
+retry logic — waiting for the period
+specified in the Retry-After header
+before retrying, with an increasing
+wait time for subsequent failures.
+This is standard practice for any
+tool that queries cloud APIs at volume
+but it is not obvious to engineers
+who have not encountered rate limiting
+in practice.
 
-The decision to use AMA with Data
-Collection Rules was deliberate —
-it aligns with Microsoft's current
-architecture and avoids a future
-migration. The challenge was that
-some Sentinel data connector
-documentation still references the
-MMA method. Navigating between
-current and legacy documentation
-to implement the correct architecture
-required careful attention to
-publication dates and version
-references.
+*Consistent results across runs*
 
-*Analytics rule tuning*
+Early versions of the tool produced
+slightly different scores on consecutive
+runs of the same unchanged environment
+because some API responses are
+eventually consistent — they reflect
+the state of the system at the time
+of the API call and may not immediately
+reflect recent changes. The solution
+was to add a stabilisation delay after
+any configuration change before running
+an assessment, and to document that
+assessment results represent a point-
+in-time snapshot rather than a real-
+time view.
 
-The initial brute force threshold
-of five failures in five minutes
-generated significant false positive
-volume from a service account that
-was misconfigured and repeatedly
-attempting to authenticate with
-an expired password. Rather than
-raising the threshold — which would
-have reduced detection sensitivity
-— I added an exclusion for the
-specific service account and created
-a separate lower-priority alert
-for that account's authentication
-failures to ensure the underlying
-misconfiguration was addressed.
+*On-premises query from cloud context*
 
-This is the reality of production
-SOC operation. Tuning is continuous.
-Rules that generate noise are not
-disabled — they are refined. The
-goal is high-fidelity alerting, not
-silence.
-
-*Incident volume management*
-
-Three active analytics rules on a
-production Domain Controller generate
-meaningful incident volume. Managing
-this volume without allowing genuine
-threats to be lost in noise required
-implementing incident grouping —
-configuring rules to group related
-events into a single incident rather
-than creating a separate incident
-for every event that matches the
-rule criteria. A brute force attack
-generating fifty failed logon events
-creates one incident, not fifty.
+Some hybrid assessment controls query
+Active Directory directly — checking
+domain admin count, audit policy
+configuration, and DC security settings.
+These queries require the assessment
+to run from a context that can reach
+the Domain Controller, not from a
+cloud-only environment. The tool
+includes a detection step that
+identifies whether the Active Directory
+module is available and gracefully
+degrades the hybrid assessment to
+Azure-only if it is not — ensuring
+the tool is useful in pure cloud
+contexts as well as hybrid ones.
 
 ---
 
 ## Lessons Learned
 
-The most important lesson from
-operating this SOC was that detection
-without response is notification
-without action. An analytics rule
-that fires and creates an incident
-has provided awareness. Awareness
-without response is insufficient —
-an adversary continues operating
-while the incident sits in the queue
-waiting for an analyst.
+The most valuable lesson from building
+this tool was about the relationship
+between automation and understanding.
 
-The integration between Sentinel
-detection and ADSAE automated
-response — described in Project 9
-— is the answer to this problem
-in this environment. For larger
-environments the answer is a full
-SOAR implementation using Sentinel
-playbooks to execute response actions
-automatically. The principle is the
-same regardless of scale: detection
-and response must be coupled, not
-sequential.
+It is not possible to write a reliable
+automated check for a security control
+without deeply understanding that
+control. Writing the Conditional Access
+coverage check required understanding
+exactly what constitutes complete CA
+coverage — which users must be included,
+which exclusions are acceptable, which
+cloud apps must be covered. The act
+of writing the check surfaced gaps in
+that understanding that reading
+documentation alone had not revealed.
+
+Building security tools is one of
+the most effective ways to develop
+security knowledge — not because
+the tool itself teaches the concepts
+but because the requirement to express
+the concepts as precise programmatic
+logic forces a level of understanding
+that conceptual knowledge does not
+require.
 
 The second lesson was about the
-value of real data. Every tutorial
-on Sentinel analytics rules uses
-sample data or generated test events.
-Operating against real Domain
-Controller events surfaces issues
-that sample data never reveals —
-legitimate processes that match
-detection signatures, service accounts
-with authentication patterns that
-look malicious, scheduled tasks
-created by monitoring tools that
-appear in persistence hunting queries.
-Tuning a rule against real data is
-a fundamentally different and more
-valuable experience than writing
-a rule against synthetic data.
+organisational value of consistency.
+A manually produced assessment report
+varies in structure, detail level, and
+severity calibration based on who
+produces it and when. An automated
+report is identical in structure every
+time. This consistency means that
+month-over-month comparison is
+meaningful — differences in the report
+reflect differences in the environment,
+not differences in how the report
+was produced.
 
 ---
 
 ## What I Would Do Differently at Scale
 
-At enterprise scale I would implement
-the Sentinel SOC with dedicated tiers —
-Level 1 analysts for triage and initial
-response, Level 2 for investigation,
-and Level 3 for threat hunting and
-rule development. The playbooks would
-be significantly more extensive,
-covering automated containment actions
-including isolating endpoints through
-Defender for Endpoint, disabling
-accounts through Graph API, and
-creating firewall rules to block
-malicious IPs.
+At enterprise scale the assessment
+engine would be deployed as an Azure
+Function — running on a schedule,
+storing results in Azure Table Storage,
+and posting summaries to a Teams
+channel. The report would be generated
+on demand through a Power Apps
+interface, allowing non-technical
+stakeholders to request and view the
+latest assessment without PowerShell
+access.
 
-UEBA — User and Entity Behaviour
-Analytics — would be enabled in Sentinel
-to provide baseline behavioural
-profiles for each user and alert on
-deviations that individual analytics
-rules miss. UEBA detects the subtle
-anomalies that pattern-matching rules
-cannot — a user who normally generates
-50 events per day suddenly generating
-5000, or an account that never
-authenticates outside business hours
-suddenly authenticating at 3am.
+The control framework would be extended
+to support custom controls defined in
+a JSON configuration file, allowing
+each organisation to add controls
+specific to their regulatory environment
+without modifying the core engine code.
 
-The threat hunting programme would
-be formalised with a hunting hypothesis
-backlog, scheduled hunting sessions,
-and a process for converting successful
-hunts into analytics rules — closing
-the loop between proactive and reactive
-detection.
+Integration with ticketing systems —
+ServiceNow, Jira — would automate
+the creation of remediation tickets
+for new findings, assigning them to
+the appropriate team based on the
+finding category and linking the
+ticket to the assessment report
+for traceability.
 
 ---
+
 
 Uzma Shabbir
 Azure Security Engineer | AZ-104 | AZ-500
