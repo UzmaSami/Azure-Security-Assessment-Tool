@@ -1,15 +1,6 @@
 
 # 🔐 Azure Security Assessment Tool
 
-## Overview
-Automated PowerShell tool that assesses Azure
-environment security across 24+ controls in
-6 categories and generates a beautiful
-interactive HTML report with remediation guidance.
-
-*Author:* Uzma Sami | AZ-104 | AZ-500
-*Language:* Pure PowerShell
-*Cost:* £0 — No Azure resources consumed
 
 ## Architecture
 ![Architecture](docs/architecture-diagram.png)
