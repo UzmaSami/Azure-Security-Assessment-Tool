@@ -116,29 +116,29 @@ AZURE                                       - │
   - ├── DATA CONNECTORS
   - │   ├── Windows Security Events via AMA
   - │   ├── Microsoft Defender for Cloud
-    │   ├── Azure Activity
-    │   └── Azure AD Identity Protection
-    │
-    ├── ANALYTICS RULES (Custom)
-    │   ├── Brute Force — 5+ failures in 5min
-    │   ├── Privilege Escalation — Group 4728
-    │   ├── Suspicious PowerShell — Event 4104
-    │   ├── After Hours Admin Logon
-    │   └── New Local Admin Account Created
-    │
-    ├── INCIDENTS
-    │   ├── Real brute force detected ✅
-    │   ├── Real priv escalation detected ✅
-    │   └── Real PowerShell detected ✅
-    │
-    ├── AUTOMATION RULES
-    │   ├── Auto-assign to analyst
-    │   ├── Auto-tag by severity
-    │   └── Trigger playbooks
-    │
-    └── PLAYBOOKS (Logic Apps)
-        ├── Notify-On-Critical-Incident
-        └── Enrich-Incident-With-IP-Info
+  - │   ├── Azure Activity
+  - │   └── Azure AD Identity Protection
+  - │
+  - ├── ANALYTICS RULES (Custom)
+  - │   ├── Brute Force — 5+ failures in 5min
+  - │   ├── Privilege Escalation — Group 4728
+  - │   ├── Suspicious PowerShell — Event 4104
+  - │   ├── After Hours Admin Logon
+  - │   └── New Local Admin Account Created
+  - │
+  - ├── INCIDENTS
+  - │   ├── Real brute force detected ✅
+  - │   ├── Real priv escalation detected ✅
+  - │   └── Real PowerShell detected ✅
+  - │
+  - ├── AUTOMATION RULES
+  - │   ├── Auto-assign to analyst
+  - │   ├── Auto-tag by severity
+  - │   └── Trigger playbooks
+  - │
+  -└── PLAYBOOKS (Logic Apps)
+    - ├── Notify-On-Critical-Incident
+      - └── Enrich-Incident-With-IP-Info
 
 
 ---
